@@ -48,9 +48,13 @@ The tool requires authentication and a Google Cloud Project ID. You can configur
 **Example `.env` file:**
 
 ```env
-# Required
+# Option 1: Application Default Credentials (Recommended for local dev)
 GCLOUD_PROJECT=your-google-cloud-project-id
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account-key.json
+
+# Option 2: API Key (Simpler for some remote setups)
+GOOGLE_API_KEY=AIzaSy...YourAPIKey...
+GCLOUD_PROJECT=your-google-cloud-project-id
 
 # Optional
 PYGAME_HIDE_SUPPORT_PROMPT=1

@@ -1,18 +1,24 @@
 from typing import Optional
 from google.cloud import texttospeech
 from google.api_core import exceptions
+from google.api_core.client_options import ClientOptions
 import google.auth.exceptions
 from generate_gemini_voice.config import settings
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
     """Returns an authenticated TextToSpeechClient."""
     try:
+        if settings.google_api_key:
+            options = ClientOptions(api_key=settings.google_api_key)
+            return texttospeech.TextToSpeechClient(client_options=options)
+        
         return texttospeech.TextToSpeechClient()
     except google.auth.exceptions.DefaultCredentialsError as e:
         raise RuntimeError(
             "Google Cloud Credentials not found.\n"
-            "Please run 'gcloud auth application-default login' "
-            "or set the GOOGLE_APPLICATION_CREDENTIALS environment variable."
+            "Please run 'gcloud auth application-default login', "
+            "set the GOOGLE_APPLICATION_CREDENTIALS environment variable, "
+            "or set GOOGLE_API_KEY in your .env file."
         ) from e
 
 def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
@@ -58,13 +64,21 @@ def generate_speech(
     try:
         # Note: 'parent' is often required for quota/billing attribution 
         # with newer models or specific quotas.
-        response = client.synthesize_speech(
-            request={
-                "input": synthesis_input,
-                "voice": voice_params,
-                "audio_config": audio_config,
-            }
-        )
+        # If API key is used, project ID might be inferred from the key, 
+        # but passing parent explicitly is safer if project_id is known.
+        request_kwargs = {
+            "input": synthesis_input,
+            "voice": voice_params,
+            "audio_config": audio_config,
+        }
+        
+        # Only add parent if project_id is available. 
+        # API keys are tied to a project, so explicit parent might be redundant 
+        # but good practice.
+        if actual_project_id:
+             request_kwargs["parent"] = f"projects/{actual_project_id}"
+
+        response = client.synthesize_speech(request=request_kwargs)
     except exceptions.GoogleAPICallError as e:
         raise RuntimeError(f"Error during speech synthesis: {e}") from e
 
