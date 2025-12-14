@@ -65,23 +65,22 @@ def generate_speech(
     audio_config = texttospeech.AudioConfig(audio_encoding=audio_encoding)
 
     try:
-        # Note: 'parent' is often required for quota/billing attribution 
-        # with newer models or specific quotas.
-        # If API key is used, project ID might be inferred from the key, 
-        # but passing parent explicitly is safer if project_id is known.
-        request_kwargs = {
-            "input": synthesis_input,
-            "voice": voice_params,
-            "audio_config": audio_config,
-        }
+        # 'parent' should be a direct argument to synthesize_speech, not in 'request'.
+        # The request object itself contains input, voice, and audio_config.
+        request = texttospeech.SynthesizeSpeechRequest(
+            input=synthesis_input,
+            voice=voice_params,
+            audio_config=audio_config,
+        )
         
-        # Only add parent if project_id is available. 
-        # API keys are tied to a project, so explicit parent might be redundant 
-        # but good practice.
         if actual_project_id:
-             request_kwargs["parent"] = f"projects/{actual_project_id}"
+            response = client.synthesize_speech(
+                request=request,
+                parent=f"projects/{actual_project_id}"
+            )
+        else:
+            response = client.synthesize_speech(request=request)
 
-        response = client.synthesize_speech(request=request_kwargs)
     except exceptions.GoogleAPICallError as e:
         raise RuntimeError(f"Error during speech synthesis: {e}") from e
 
