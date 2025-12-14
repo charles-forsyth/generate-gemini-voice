@@ -1,14 +1,17 @@
 from pathlib import Path
 from typing import Optional
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 class Settings(BaseSettings):
     google_application_credentials: Optional[str] = Field(
         default=None, 
         description="Path to the Google Cloud service account key file."
+    )
+    google_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="GOOGLE_API_KEY",
+        description="Google Cloud API Key for authentication."
     )
     gcloud_project: str = Field(
         default="ucr-research-computing",
