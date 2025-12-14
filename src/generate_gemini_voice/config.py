@@ -24,13 +24,18 @@ def ensure_config_exists():
                     f"# Optional: Hide pygame support prompt\n"
                     f"PYGAME_HIDE_SUPPORT_PROMPT=1\n"
                 )
+            # Secure the file so only the owner can read/write it
+            try:
+                os.chmod(USER_CONFIG_FILE, 0o600)
+            except OSError as e:
+                print(f"Warning: Could not set secure permissions on {USER_CONFIG_FILE}: {e}", file=sys.stderr)
+
             print(f"Created new configuration file at: {USER_CONFIG_FILE}", file=sys.stderr)
             print("Please edit this file to add your GOOGLE_API_KEY and GCLOUD_PROJECT.", file=sys.stderr)
         except Exception as e:
             print(f"Warning: Could not create configuration file at {USER_CONFIG_FILE}: {e}", file=sys.stderr)
 
-# Run the check before initializing settings
-ensure_config_exists()
+# ensure_config_exists() # Removed side effect on import
 
 class Settings(BaseSettings):
     google_application_credentials: Optional[str] = Field(
