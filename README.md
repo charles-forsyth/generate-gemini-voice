@@ -43,24 +43,17 @@ uv pip install -e .
 
 ## Configuration
 
-The tool requires authentication and a Google Cloud Project ID. You can configure these using environment variables or a `.env` file in your home directory (`~/.env`) or the project root.
+Authentication is done via a Google Cloud API Key. Set your API key in a `.env` file in your home directory (`~/.env`) or the project root.
 
 **Example `.env` file:**
 
 ```env
-# Option 1: Application Default Credentials (Recommended for local dev)
-GCLOUD_PROJECT=your-google-cloud-project-id
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account-key.json
-
-# Option 2: API Key (Simpler for some remote setups)
 GOOGLE_API_KEY=AIzaSy...YourAPIKey...
 GCLOUD_PROJECT=your-google-cloud-project-id
 
 # Optional
 PYGAME_HIDE_SUPPORT_PROMPT=1
 ```
-
-*Note: If you have the Google Cloud SDK installed, you can often skip `GOOGLE_APPLICATION_CREDENTIALS` by running `gcloud auth application-default login`.*
 
 ## Usage
 
@@ -101,23 +94,16 @@ To hear a quick introduction from every available "Chirp" voice:
 generate-voice --sample-voices
 ```
 
-**4. Read from a text file:**
+**4. Read from a text file and save as WAV:**
 
 ```bash
 generate-voice --input-file script.txt --output-file output.wav --audio-format WAV
 ```
 
-**4. Pipe text from another command:**
+**5. Pipe text from another command:**
 
 ```bash
 echo "Piped input is supported." | generate-voice --temp
-```
-
-**5. Convert a web page summary (example workflow):**
-
-```bash
-# Assuming you have a tool to extract text
-extract-text https://example.com | generate-voice --temp
 ```
 
 ## Command Line Options
