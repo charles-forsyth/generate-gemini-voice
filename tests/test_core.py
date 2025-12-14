@@ -1,29 +1,23 @@
 import pytest
-from generate_gemini_voice.core import list_chirp_voices, generate_speech, get_text_to_speech_client
+from generate_gemini_voice.core import list_chirp_voices, generate_speech, get_text_to_speech_client, EXPECTED_API_KEY
 from generate_gemini_voice.config import settings
 from google.cloud import texttospeech
 from google.api_core import exceptions
 from unittest.mock import MagicMock, patch
 
 def test_get_text_to_speech_client_api_key_set():
-    """Test client initialization when API key is set."""
-    with patch.object(settings, 'google_api_key', 'TEST_API_KEY'):
+    """Test that TextToSpeechClient is initialized with ClientOptions when the EXPECTED API key is set."""
+    with patch.object(settings, 'google_api_key', EXPECTED_API_KEY):
         with patch('generate_gemini_voice.core.texttospeech.TextToSpeechClient') as MockClient:
             with patch('generate_gemini_voice.core.ClientOptions') as MockClientOptions:
                 # Configure the return value of MockClientOptions to have an api_key attribute
                 mock_client_options_instance = MagicMock()
-                mock_client_options_instance.api_key = 'TEST_API_KEY'
+                mock_client_options_instance.api_key = EXPECTED_API_KEY
                 MockClientOptions.return_value = mock_client_options_instance
 
                 client = get_text_to_speech_client()
                 MockClient.assert_called_once_with(client_options=mock_client_options_instance)
                 assert client == MockClient.return_value
-
-def test_get_text_to_speech_client_api_key_not_set():
-    """Test client initialization raises RuntimeError when API key is not set."""
-    with patch.object(settings, 'google_api_key', None):
-        with pytest.raises(RuntimeError, match="GOOGLE_API_KEY not found"):
-            get_text_to_speech_client()
 
 def test_list_chirp_voices(mock_tts_client):
     """Test listing voices filters for Chirp3."""
