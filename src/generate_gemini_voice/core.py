@@ -4,6 +4,7 @@ from google.api_core import exceptions
 from google.api_core.client_options import ClientOptions
 import sys
 from generate_gemini_voice.config import settings, USER_CONFIG_FILE
+from generate_gemini_voice.utils import split_text_into_chunks, combine_audio_data
 
 # Define the expected valid API key for strict checking.
 # This is a temporary measure for debugging.
@@ -44,6 +45,26 @@ def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
     except exceptions.GoogleAPICallError as e:
         raise RuntimeError(f"Error fetching voice list: {e}") from e
 
+def _synthesize_single_chunk(
+    client: texttospeech.TextToSpeechClient,
+    text: str,
+    voice_params: texttospeech.VoiceSelectionParams,
+    audio_config: texttospeech.AudioConfig
+) -> bytes:
+    """Helper to synthesize a single chunk of text."""
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    try:
+        response = client.synthesize_speech(
+            request={
+                "input": synthesis_input,
+                "voice": voice_params,
+                "audio_config": audio_config,
+            }
+        )
+        return response.audio_content
+    except exceptions.GoogleAPICallError as e:
+        raise RuntimeError(f"Error during speech synthesis: {e}") from e
+
 def generate_speech(
     text: str,
     output_file: str,
@@ -52,7 +73,7 @@ def generate_speech(
     audio_format: str = "MP3",
     project_id: Optional[str] = None
 ) -> None:
-    """Generates speech from text using Google Cloud Text-to-Speech."""
+    """Generates speech from text using Google Cloud Text-to-Speech. Handles long text by chunking."""
     
     # Map format string to AudioEncoding
     audio_encoding_map = {
@@ -68,24 +89,29 @@ def generate_speech(
     actual_project_id = project_id or settings.gcloud_project
     
     client = get_text_to_speech_client()
-    synthesis_input = texttospeech.SynthesisInput(text=text)
     voice_params = texttospeech.VoiceSelectionParams(
         language_code=language_code, 
         name=voice_name
     )
     audio_config = texttospeech.AudioConfig(audio_encoding=audio_encoding)
 
-    try:
-        response = client.synthesize_speech(
-            request={
-                "input": synthesis_input,
-                "voice": voice_params,
-                "audio_config": audio_config,
-            }
+    # 1. Split text
+    chunks = split_text_into_chunks(text)
+    audio_data_list = []
+
+    # 2. Process chunks
+    # Note: If there are many chunks, we might want to log progress,
+    # but strictly following the "clean output" rule, we'll keep it silent
+    # unless there's an error.
+    for chunk in chunks:
+        audio_content = _synthesize_single_chunk(
+            client, chunk, voice_params, audio_config
         )
+        audio_data_list.append(audio_content)
 
-    except exceptions.GoogleAPICallError as e:
-        raise RuntimeError(f"Error during speech synthesis: {e}") from e
+    # 3. Combine audio
+    final_audio = combine_audio_data(audio_data_list, audio_format)
 
+    # 4. Write to file
     with open(output_file, "wb") as out:
-        out.write(response.audio_content)
+        out.write(final_audio)
