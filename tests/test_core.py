@@ -1,18 +1,19 @@
 import pytest
-from generate_gemini_voice.core import list_chirp_voices, generate_speech, get_text_to_speech_client, EXPECTED_API_KEY
+from generate_gemini_voice.core import list_chirp_voices, generate_speech, get_text_to_speech_client
 from generate_gemini_voice.config import settings
 from google.cloud import texttospeech
 from google.api_core import exceptions
 from unittest.mock import MagicMock, patch
 
 def test_get_text_to_speech_client_api_key_set():
-    """Test that TextToSpeechClient is initialized with ClientOptions when the EXPECTED API key is set."""
-    with patch.object(settings, 'google_api_key', EXPECTED_API_KEY):
+    """Test that TextToSpeechClient is initialized with ClientOptions when ANY valid-looking API key is set."""
+    dummy_key = "dummy_valid_key_12345"
+    with patch.object(settings, 'google_api_key', dummy_key):
         with patch('generate_gemini_voice.core.texttospeech.TextToSpeechClient') as MockClient:
             with patch('generate_gemini_voice.core.ClientOptions') as MockClientOptions:
                 # Configure the return value of MockClientOptions to have an api_key attribute
                 mock_client_options_instance = MagicMock()
-                mock_client_options_instance.api_key = EXPECTED_API_KEY
+                mock_client_options_instance.api_key = dummy_key
                 MockClientOptions.return_value = mock_client_options_instance
 
                 client = get_text_to_speech_client()
