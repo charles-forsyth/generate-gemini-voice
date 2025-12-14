@@ -6,7 +6,7 @@ from typing import Optional
 
 from generate_gemini_voice.core import list_chirp_voices, generate_speech
 from generate_gemini_voice.utils import create_filename, play_audio
-from generate_gemini_voice.config import settings
+from generate_gemini_voice.config import settings, ensure_config_exists
 from google.cloud import texttospeech
 
 def list_voices_table(voice_list: list[texttospeech.Voice]):
@@ -27,6 +27,10 @@ def list_voices_table(voice_list: list[texttospeech.Voice]):
 
 def main():
     """Parses command-line arguments and calls the voice generation function."""
+    
+    # Ensure config exists and permissions are secure
+    ensure_config_exists()
+
     epilog_examples = """
 EXAMPLES:
 
