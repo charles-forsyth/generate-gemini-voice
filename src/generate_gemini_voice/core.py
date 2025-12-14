@@ -13,8 +13,6 @@ def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
     """Returns an authenticated TextToSpeechClient using an API key. Raises RuntimeError if API key is not set or is incorrect."""
     api_key = settings.google_api_key
     
-    print(f"DEBUG: GOOGLE_API_KEY loaded: {api_key}", file=sys.stderr)
-
     if not api_key:
         raise RuntimeError(
             "GOOGLE_API_KEY not found in environment or .env file.\n"
@@ -22,7 +20,6 @@ def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
         )
 
     if api_key == EXPECTED_API_KEY:
-        print("Authenticating with the expected GOOGLE_API_KEY.", file=sys.stderr)
         options = ClientOptions(api_key=api_key)
         return texttospeech.TextToSpeechClient(client_options=options)
     elif "replace_with_your_api_key" in api_key:
