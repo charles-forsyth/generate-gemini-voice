@@ -3,15 +3,18 @@ from google.cloud import texttospeech
 from google.api_core import exceptions
 from google.api_core.client_options import ClientOptions
 import google.auth.exceptions
+import sys
 from generate_gemini_voice.config import settings
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
     """Returns an authenticated TextToSpeechClient."""
     try:
         if settings.google_api_key:
+            print("Authenticating with GOOGLE_API_KEY.", file=sys.stderr)
             options = ClientOptions(api_key=settings.google_api_key)
             return texttospeech.TextToSpeechClient(client_options=options)
         
+        print("Authenticating with Application Default Credentials.", file=sys.stderr)
         return texttospeech.TextToSpeechClient()
     except google.auth.exceptions.DefaultCredentialsError as e:
         raise RuntimeError(
