@@ -6,17 +6,16 @@ import sys
 from generate_gemini_voice.config import settings
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
-    """Returns an authenticated TextToSpeechClient using an API key if provided, otherwise attempts default client initialization."""
+    """Returns an authenticated TextToSpeechClient using an API key. Raises RuntimeError if API key is not set."""
     if settings.google_api_key:
         print("Authenticating with GOOGLE_API_KEY.", file=sys.stderr)
         options = ClientOptions(api_key=settings.google_api_key)
         return texttospeech.TextToSpeechClient(client_options=options)
-    
-    print("GOOGLE_API_KEY not set. Attempting default client initialization. "
-          "This may require GOOGLE_APPLICATION_CREDENTIALS or gcloud auth.", file=sys.stderr)
-    # If API key is not set, let the client library attempt its default authentication flow.
-    # This will likely fail if no ADC or other credentials are set, as per user's preference.
-    return texttospeech.TextToSpeechClient()
+    else:
+        raise RuntimeError(
+            "GOOGLE_API_KEY not found in environment or .env file.\n"
+            "Please set GOOGLE_API_KEY to your Google Cloud API Key."
+        )
 
 def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
     """Returns a list of available 'Chirp3' voices for the given language."""
@@ -59,19 +58,15 @@ def generate_speech(
     audio_config = texttospeech.AudioConfig(audio_encoding=audio_encoding)
 
     try:
-        request = texttospeech.SynthesizeSpeechRequest(
-            input=synthesis_input,
-            voice=voice_params,
-            audio_config=audio_config,
+        # When using an API key, the 'parent' argument is not expected in synthesize_speech.
+        # Project ID is implicitly handled by the API key itself for billing/quota.
+        response = client.synthesize_speech(
+            request={
+                "input": synthesis_input,
+                "voice": voice_params,
+                "audio_config": audio_config,
+            }
         )
-        
-        if actual_project_id:
-            response = client.synthesize_speech(
-                request=request,
-                parent=f"projects/{actual_project_id}"
-            )
-        else:
-            response = client.synthesize_speech(request=request)
 
     except exceptions.GoogleAPICallError as e:
         raise RuntimeError(f"Error during speech synthesis: {e}") from e
