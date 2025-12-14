@@ -43,7 +43,11 @@ uv pip install -e .
 
 ## Configuration
 
-Authentication is done via a Google Cloud API Key. Set your API key in a `.env` file in your home directory (`~/.env`) or the project root.
+Authentication is done via a Google Cloud API Key. Set your API key in a `.env` file in one of the following locations (searched in order):
+
+1.  The **current working directory** where you run the command (`./.env`).
+2.  Your **home directory** (`~/.env`).
+3.  Your **user configuration directory** (`~/.config/generate-gemini-voice/.env`).
 
 **Example `.env` file:**
 
