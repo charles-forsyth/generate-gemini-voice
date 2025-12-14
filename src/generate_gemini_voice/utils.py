@@ -45,70 +45,130 @@ def play_audio(file_path: str):
 def split_text_into_chunks(text: str, limit: int = 4000) -> list[str]:
     """
     Splits text into chunks strictly less than `limit` bytes (UTF-8 encoded), 
-    attempting to break on sentence boundaries.
+    attempting to break on sentence boundaries, then words, then characters.
     """
-    if len(text.encode('utf-8')) < limit:
+    if not text:
+        return []
+        
+    encoded_text = text.encode('utf-8')
+    if len(encoded_text) <= limit:
         return [text]
 
     chunks = []
     current_chunk = ""
+    current_chunk_bytes = 0
     
-    # Split by sentence endings (. ! ? or newlines) keeping the delimiter
+    # 1. Primary Split: Sentence boundaries (. ! ? or newlines)
+    # We use a regex that keeps the delimiter with the sentence
     sentences = re.split(r'(?<=[.!?\n])\s+', text)
 
     for sentence in sentences:
-        # Check size in bytes
-        current_bytes = len(current_chunk.encode('utf-8'))
         sentence_bytes = len(sentence.encode('utf-8'))
-        # Separator (space) is 1 byte
-        sep_bytes = 1 if current_chunk else 0
-
-        if current_bytes + sentence_bytes + sep_bytes > limit:
+        
+        # Calculate separator size (space) if we append to current chunk
+        sep_len = 1 if current_chunk else 0
+        
+        if current_chunk_bytes + sep_len + sentence_bytes <= limit:
+            # Fits in current chunk
+            if current_chunk:
+                current_chunk += " " + sentence
+                current_chunk_bytes += 1 + sentence_bytes
+            else:
+                current_chunk = sentence
+                current_chunk_bytes = sentence_bytes
+        else:
+            # Doesn't fit. 
+            # First, save what we have if it's not empty
             if current_chunk:
                 chunks.append(current_chunk.strip())
                 current_chunk = ""
+                current_chunk_bytes = 0
             
-            # If a single sentence is huge
-            if len(sentence.encode('utf-8')) > limit:
-                while len(sentence.encode('utf-8')) > limit:
-                    # We need to find a split point that fits in 'limit' bytes
-                    # Simple approach: binary search or just conservative char slicing?
-                    # Conservative slicing: limit / 4 chars is safe lower bound, limit chars is upper.
+            # Now handle the current sentence.
+            # It might be small enough to be the start of a new chunk,
+            # or it might be huge (larger than limit) and need further splitting.
+            
+            if sentence_bytes <= limit:
+                current_chunk = sentence
+                current_chunk_bytes = sentence_bytes
+            else:
+                # The sentence itself is too big. We must split it.
+                # We need to slice 'sentence' such that the slice encoded is <= limit.
+                remaining_sentence = sentence
+                
+                while remaining_sentence:
+                    # If remaining fits, done
+                    if len(remaining_sentence.encode('utf-8')) <= limit:
+                        current_chunk = remaining_sentence
+                        current_chunk_bytes = len(remaining_sentence.encode('utf-8'))
+                        break
+                        
+                    # Find a safe split point.
+                    # We can't use simple slicing because Python slices chars, not bytes.
+                    # We need to find char index k such that remaining_sentence[:k] is just under limit.
                     
-                    # Let's try to split by space first within the byte limit
-                    # Construct a candidate string that fits
-                    candidate = sentence
-                    while len(candidate.encode('utf-8')) > limit:
-                        # trim chars roughly
-                        char_len = len(candidate)
-                        # approximation
-                        excess_ratio = limit / len(candidate.encode('utf-8'))
-                        new_char_len = int(char_len * excess_ratio)
-                        if new_char_len >= char_len:
-                            new_char_len = char_len - 1
-                        candidate = candidate[:new_char_len]
+                    # Estimate char length. 
+                    # 1 char >= 1 byte. So limit chars is the absolute max (if ASCII).
+                    # If all 4-byte chars, limit/4 is min.
                     
-                    # Now 'candidate' fits in bytes.
-                    # Try to find a space in this candidate to break cleanly
-                    split_idx = candidate.rfind(' ')
-                    if split_idx == -1:
-                        # No space, just hard chop at candidate length
-                        # Ensure we don't cut in middle of multibyte char? 
-                        # Python slicing handles chars, so candidate is valid string.
-                        chunks.append(candidate.strip())
-                        sentence = sentence[len(candidate):].strip()
+                    # Start with a safe upper bound estimate based on ratio
+                    rem_bytes = len(remaining_sentence.encode('utf-8'))
+                    rem_chars = len(remaining_sentence)
+                    avg_bytes_per_char = rem_bytes / rem_chars
+                    
+                    target_chars = int(limit / avg_bytes_per_char)
+                    
+                    # Refine target_chars to be strictly <= limit bytes
+                    # Try to grow if safe, shrink if not
+                    
+                    # Heuristic: Start slightly optimistic, then shrink
+                    candidate_str = remaining_sentence[:target_chars + 100] # +padding for variation
+                    while len(candidate_str.encode('utf-8')) > limit:
+                        # Too big, slice off end. 
+                        # How much? proportional diff
+                        curr_b = len(candidate_str.encode('utf-8'))
+                        diff = curr_b - limit
+                        # Approximate chars to drop (assume 1 byte/char to be conservative in dropping?)
+                        # No, assume max density to drop faster?
+                        drop_chars = max(1, int(diff / 4)) # assume big chars to drop fewer? No.
+                        # safer: drop 1 char at least.
+                        candidate_str = candidate_str[:-1] 
+                    
+                    # Now candidate_str fits. But is it a clean split?
+                    # Try to find a space or punctuation near the end.
+                    # Look back up to 20% of the chunk size
+                    best_split_idx = -1
+                    lookback_limit = int(len(candidate_str) * 0.2)
+                    
+                    # Try weaker punctuation first: , ; :
+                    match = re.search(r'[;,:]\s', candidate_str[-lookback_limit:])
+                    if match:
+                        # Found punctuation. Split *after* it (and space).
+                        # match.end() is relative to the slice start
+                        # real index in candidate_str is len(candidate_str) - lookback_limit + match.end()
+                        best_split_idx = len(candidate_str) - lookback_limit + match.end()
                     else:
-                        chunks.append(sentence[:split_idx].strip())
-                        sentence = sentence[split_idx:].strip()
-                current_chunk = sentence
-            else:
-                current_chunk = sentence
-        else:
-            if current_chunk:
-                current_chunk += " " + sentence
-            else:
-                current_chunk = sentence
-    
+                        # Try space
+                        space_idx = candidate_str.rfind(' ')
+                        if space_idx != -1 and (len(candidate_str) - space_idx) < lookback_limit:
+                            best_split_idx = space_idx
+                    
+                    if best_split_idx != -1:
+                        # Clean split found
+                        final_chunk = candidate_str[:best_split_idx].strip()
+                        # Adjust remaining
+                        # We cut at best_split_idx.
+                        # But wait, candidate_str is a prefix of remaining_sentence.
+                        # So we advance remaining_sentence by best_split_idx
+                        remaining_sentence = remaining_sentence[best_split_idx:].strip()
+                    else:
+                        # Hard split
+                        final_chunk = candidate_str
+                        remaining_sentence = remaining_sentence[len(final_chunk):].strip()
+                        
+                    chunks.append(final_chunk)
+
+    # Append any leftovers
     if current_chunk:
         chunks.append(current_chunk.strip())
         

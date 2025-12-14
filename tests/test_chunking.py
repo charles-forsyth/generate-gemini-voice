@@ -82,3 +82,16 @@ def test_split_text_multibyte():
     assert len(chunks) == 2
     assert chunks[0] == "🙂🙂"
     assert chunks[1] == "🙂"
+
+def test_split_text_strict_bytes():
+    # Construct a string where chars are 4 bytes.
+    # 20 chars = 80 bytes. Limit 30 bytes.
+    # Should split into chunks of max 7 chars (28 bytes).
+    text = "🙂" * 20
+    chunks = split_text_into_chunks(text, limit=30)
+    
+    for c in chunks:
+        assert len(c.encode('utf-8')) <= 30
+    
+    assert len(chunks) >= 3
+    assert "".join(chunks) == text
