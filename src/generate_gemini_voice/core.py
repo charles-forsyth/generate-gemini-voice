@@ -1,4 +1,5 @@
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 from google.cloud import texttospeech
 from google.api_core import exceptions
 from google.api_core.client_options import ClientOptions
@@ -46,12 +47,19 @@ def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
         raise RuntimeError(f"Error fetching voice list: {e}") from e
 
 def _synthesize_single_chunk(
-    client: texttospeech.TextToSpeechClient,
     text: str,
     voice_params: texttospeech.VoiceSelectionParams,
-    audio_config: texttospeech.AudioConfig
+    audio_config: texttospeech.AudioConfig,
+    client: Optional[texttospeech.TextToSpeechClient] = None
 ) -> bytes:
-    """Helper to synthesize a single chunk of text."""
+    """
+    Helper to synthesize a single chunk of text.
+    Client is optional to allow thread-local client creation if needed, 
+    but gRPC clients are generally thread-safe.
+    """
+    if client is None:
+        client = get_text_to_speech_client()
+        
     synthesis_input = texttospeech.SynthesisInput(text=text)
     try:
         response = client.synthesize_speech(
@@ -63,7 +71,9 @@ def _synthesize_single_chunk(
         )
         return response.audio_content
     except exceptions.GoogleAPICallError as e:
-        raise RuntimeError(f"Error during speech synthesis: {e}") from e
+        # Include text snippet in error for context
+        snippet = text[:50] + "..." if len(text) > 50 else text
+        raise RuntimeError(f"Error during speech synthesis for chunk '{snippet}': {e}") from e
 
 def generate_speech(
     text: str,
@@ -73,7 +83,7 @@ def generate_speech(
     audio_format: str = "MP3",
     project_id: Optional[str] = None
 ) -> None:
-    """Generates speech from text using Google Cloud Text-to-Speech. Handles long text by chunking."""
+    """Generates speech from text using Google Cloud Text-to-Speech. Handles long text by chunking and parallel execution."""
     
     # Map format string to AudioEncoding
     audio_encoding_map = {
@@ -88,7 +98,10 @@ def generate_speech(
     audio_encoding = audio_encoding_map[audio_format]
     actual_project_id = project_id or settings.gcloud_project
     
+    # We create one client instance to share. 
+    # Google Cloud clients are thread-safe.
     client = get_text_to_speech_client()
+    
     voice_params = texttospeech.VoiceSelectionParams(
         language_code=language_code, 
         name=voice_name
@@ -99,15 +112,20 @@ def generate_speech(
     chunks = split_text_into_chunks(text)
     audio_data_list = []
 
-    # 2. Process chunks
-    # Note: If there are many chunks, we might want to log progress,
-    # but strictly following the "clean output" rule, we'll keep it silent
-    # unless there's an error.
-    for chunk in chunks:
-        audio_content = _synthesize_single_chunk(
-            client, chunk, voice_params, audio_config
+    # 2. Process chunks in parallel
+    # max_workers=5 as requested
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # map guarantees results are yielded in the same order as inputs
+        # We use a lambda or partial to pass constant args
+        futures = executor.map(
+            lambda chunk: _synthesize_single_chunk(chunk, voice_params, audio_config, client),
+            chunks
         )
-        audio_data_list.append(audio_content)
+        
+        # This iterates over results as they complete (preserving order), 
+        # raising any exceptions encountered.
+        for result in futures:
+            audio_data_list.append(result)
 
     # 3. Combine audio
     final_audio = combine_audio_data(audio_data_list, audio_format)
