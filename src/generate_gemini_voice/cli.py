@@ -260,9 +260,7 @@ For more details, visit: https://github.com/charles-forsyth/generate-gemini-voic
                 temp_filename = temp_audio_file.name
                 try:
                     generate_speech(**common_generate_args, output_file=temp_filename)
-                    print("Playing temporary audio file...", file=sys.stderr)
                     play_audio(temp_filename)
-                    print("Temporary file will be deleted.", file=sys.stderr)
                 except RuntimeError as e:
                     print(f"Error: {e}", file=sys.stderr)
                     sys.exit(1)
