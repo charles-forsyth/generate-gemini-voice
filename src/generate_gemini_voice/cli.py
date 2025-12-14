@@ -29,10 +29,15 @@ def main():
     """Parses command-line arguments and calls the voice generation function."""
     parser = argparse.ArgumentParser(
         description=(
-            "Generate speech from text using Google Cloud Text-to-Speech. "
-            "Accepts piped input."
+            "Generate high-quality speech from text using Google Cloud's "
+            "latest 'Chirp' models.\n\n"
+            "Examples:\n"
+            "  generate-voice \"Hello world\" --temp\n"
+            "  generate-voice --input-file script.txt --output-file audio.mp3\n"
+            "  echo \"Piped text\" | generate-voice --temp"
         ),
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="For more details, visit: https://github.com/charles-forsyth/generate-gemini-voice"
     )
 
     # --- Input Arguments ---
@@ -40,65 +45,74 @@ def main():
     input_group.add_argument(
         "text", nargs="?", type=str, default=None,
         help=(
-            "The text to synthesize. Can be omitted if using --input-file "
-            "or piping data."
+            "The text to synthesize. Optional if using --input-file or piping "
+            "text via stdin."
         )
     )
     input_group.add_argument(
-        "--input-file", type=str,
-        help="Path to a text file to synthesize."
+        "--input-file", type=str, metavar="FILE",
+        help="Read the text to synthesize from a specific file path."
     )
 
     # --- Output Arguments ---
     output_group = parser.add_argument_group('Output Options')
     output_group.add_argument(
-        "--output-file", type=str, default=None,
+        "--output-file", type=str, metavar="FILE", default=None,
         help=(
-            "The name of the output audio file. If not specified, a name "
-            "is generated. Ignored if --temp is used."
+            "Save the generated audio to this file. If omitted, a filename "
+            "is automatically generated based on the text and timestamp. "
+            "Ignored if --temp is used."
         )
     )
     output_group.add_argument(
         "--audio-format", type=str, default="MP3",
         choices=["MP3", "WAV", "OGG"],
         help=(
-            "The format of the output audio file. WAV is uncompressed, "
-            "OGG uses the Ogg Opus codec."
+            "The audio file format. 'MP3' (default) is widely compatible. "
+            "'WAV' is uncompressed linear PCM. 'OGG' uses the Opus codec."
         )
     )
     output_group.add_argument(
         "--temp", action="store_true",
-        help="Use a temporary file for audio playback, which is deleted after playing."
+        help=(
+            "Generate the audio to a temporary file, play it immediately, "
+            "and then delete it. Useful for quick previews."
+        )
     )
     output_group.add_argument(
         "--no-play", action="store_true",
-        help="Do not play the generated audio."
+        help=(
+            "Disable automatic playback of the generated audio file. "
+            "Default behavior is to play after generation."
+        )
     )
 
     # --- Voice Configuration ---
     voice_group = parser.add_argument_group('Voice Configuration')
     voice_group.add_argument(
-        "--language-code", type=str, default="en-US",
-        help="The language code for the voice."
+        "--language-code", type=str, default="en-US", metavar="CODE",
+        help="The BCP-47 language code for the voice (default: 'en-US')."
     )
     voice_group.add_argument(
-        "--voice-name", type=str, default="en-US-Chirp3-HD-Zephyr",
+        "--voice-name", type=str, default="en-US-Chirp3-HD-Zephyr", metavar="NAME",
         help=(
-            "The name of the voice to use. Use --list-voices to see "
-            "available options."
+            "The specific Google Cloud Voice name to use. "
+            "Default: 'en-US-Chirp3-HD-Zephyr'. "
+            "Use --list-voices to see all available options."
         )
     )
     voice_group.add_argument(
         "--list-voices", action="store_true",
-        help="List available 'en-US-Chirp3' voices and exit."
+        help="List all available 'en-US' 'Chirp3' voices in a table and exit."
     )
 
     # --- Project Configuration ---
     project_group = parser.add_argument_group('Project Configuration')
     project_group.add_argument(
-        "--project-id", type=str, default=settings.gcloud_project,
+        "--project-id", type=str, default=settings.gcloud_project, metavar="ID",
         help=(
-            "Your Google Cloud project ID. Defaults to GCLOUD_PROJECT env var "
+            "The Google Cloud Project ID to bill for usage. "
+            "Defaults to the 'GCLOUD_PROJECT' environment variable "
             "or 'ucr-research-computing'."
         )
     )
@@ -133,8 +147,8 @@ def main():
 
         if not text_to_synthesize:
             parser.error(
-                "No input provided. Provide text as an argument, use "
-                "--input-file, or pipe data to the script."
+                "No input provided. Please provide text as an argument, use "
+                "--input-file, or pipe text to the script."
             )
 
         if args.temp and args.no_play:
