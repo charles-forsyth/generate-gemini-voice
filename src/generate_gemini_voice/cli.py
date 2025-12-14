@@ -52,11 +52,9 @@ EXAMPLES:
      generate-voice --sample-voices
 
 CONFIGURATION:
-  Ensure you have Google Cloud credentials set up:
-  $ gcloud auth application-default login
-  
-  Or set the environment variable:
-  $ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
+  To authenticate with Google Cloud, set your API key in a .env file:
+  $ echo "GOOGLE_API_KEY=AIzaSy...YourAPIKey..." >> .env
+  $ echo "GCLOUD_PROJECT=your-google-cloud-project-id" >> .env
 
 For more details, visit: https://github.com/charles-forsyth/generate-gemini-voice
 """

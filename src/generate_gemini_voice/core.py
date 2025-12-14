@@ -2,27 +2,21 @@ from typing import Optional
 from google.cloud import texttospeech
 from google.api_core import exceptions
 from google.api_core.client_options import ClientOptions
-import google.auth.exceptions
 import sys
 from generate_gemini_voice.config import settings
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
-    """Returns an authenticated TextToSpeechClient."""
-    try:
-        if settings.google_api_key:
-            print("Authenticating with GOOGLE_API_KEY.", file=sys.stderr)
-            options = ClientOptions(api_key=settings.google_api_key)
-            return texttospeech.TextToSpeechClient(client_options=options)
-        
-        print("Authenticating with Application Default Credentials.", file=sys.stderr)
-        return texttospeech.TextToSpeechClient()
-    except google.auth.exceptions.DefaultCredentialsError as e:
-        raise RuntimeError(
-            "Google Cloud Credentials not found.\n"
-            "Please run 'gcloud auth application-default login', "
-            "set the GOOGLE_APPLICATION_CREDENTIALS environment variable, "
-            "or set GOOGLE_API_KEY in your .env file."
-        ) from e
+    """Returns an authenticated TextToSpeechClient using an API key if provided, otherwise attempts default client initialization."""
+    if settings.google_api_key:
+        print("Authenticating with GOOGLE_API_KEY.", file=sys.stderr)
+        options = ClientOptions(api_key=settings.google_api_key)
+        return texttospeech.TextToSpeechClient(client_options=options)
+    
+    print("GOOGLE_API_KEY not set. Attempting default client initialization. "
+          "This may require GOOGLE_APPLICATION_CREDENTIALS or gcloud auth.", file=sys.stderr)
+    # If API key is not set, let the client library attempt its default authentication flow.
+    # This will likely fail if no ADC or other credentials are set, as per user's preference.
+    return texttospeech.TextToSpeechClient()
 
 def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
     """Returns a list of available 'Chirp3' voices for the given language."""
@@ -65,8 +59,6 @@ def generate_speech(
     audio_config = texttospeech.AudioConfig(audio_encoding=audio_encoding)
 
     try:
-        # 'parent' should be a direct argument to synthesize_speech, not in 'request'.
-        # The request object itself contains input, voice, and audio_config.
         request = texttospeech.SynthesizeSpeechRequest(
             input=synthesis_input,
             voice=voice_params,
