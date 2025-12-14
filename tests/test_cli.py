@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 from generate_gemini_voice.cli import main
 import sys
 
@@ -42,6 +42,23 @@ def test_cli_generate_temp(mock_tts_client, mock_pygame):
     mock_tts_client.synthesize_speech.assert_called_once()
     # Verify play_audio was called
     # We mocked pygame module in utils, so we check if mixer.music.play was called
+    mock_pygame.mixer.music.play.assert_called()
+
+def test_cli_sample_voices(mock_tts_client, mock_pygame):
+    """Test the --sample-voices argument."""
+    # Ensure our mock returns at least one voice
+    # mock_tts_client is already set up in conftest.py to return 1 voice
+    
+    with patch.object(sys, 'argv', ["generate-voice", "--sample-voices"]):
+        main()
+    
+    # Check if list_voices was called
+    mock_tts_client.list_voices.assert_called()
+    
+    # Check if synthesize_speech was called (at least once)
+    mock_tts_client.synthesize_speech.assert_called()
+    
+    # Check if play_audio was called
     mock_pygame.mixer.music.play.assert_called()
 
 def test_cli_no_input(capsys):
