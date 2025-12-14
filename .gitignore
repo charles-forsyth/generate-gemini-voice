@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+thumbs.db
+
+# Editor Swap Files
+*.swp
+*.swo
+
+# dotenv
+.env
+.env.*
+
+# Temp files
+*.tmp
+*.log
+*.bak
+
+# pytest cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Distribution / build
+/dist/
+/build/
+*.egg-info/
+
+# Specific to this project
+*.wav
+*.mp3
+*.ogg
