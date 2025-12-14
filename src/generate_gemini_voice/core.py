@@ -3,13 +3,21 @@ from google.cloud import texttospeech
 from google.api_core import exceptions
 from google.api_core.client_options import ClientOptions
 import sys
-from generate_gemini_voice.config import settings
+from generate_gemini_voice.config import settings, USER_CONFIG_FILE
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
     """Returns an authenticated TextToSpeechClient using an API key. Raises RuntimeError if API key is not set."""
-    if settings.google_api_key:
+    api_key = settings.google_api_key
+    
+    if api_key and "replace_with_your_api_key" in api_key:
+        raise RuntimeError(
+            f"Placeholder API Key detected in {USER_CONFIG_FILE}.\n"
+            "Please edit this file and replace 'replace_with_your_api_key' with your actual Google Cloud API Key."
+        )
+
+    if api_key:
         print("Authenticating with GOOGLE_API_KEY.", file=sys.stderr)
-        options = ClientOptions(api_key=settings.google_api_key)
+        options = ClientOptions(api_key=api_key)
         return texttospeech.TextToSpeechClient(client_options=options)
     else:
         raise RuntimeError(
