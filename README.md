@@ -90,7 +90,14 @@ Then use one:
 generate-voice "I have a specific voice." --voice-name en-US-Chirp3-HD-Zephyr
 ```
 
-**3. Read from a text file:**
+**3. Sample all voices:**
+
+To hear a quick introduction from every available "Chirp" voice:
+```bash
+generate-voice --sample-voices
+```
+
+**4. Read from a text file:**
 
 ```bash
 generate-voice --input-file script.txt --output-file output.wav --audio-format WAV
@@ -121,6 +128,7 @@ extract-text https://example.com | generate-voice --temp
 | `--no-play` | Generate the file but do not auto-play it. |
 | `--voice-name` | Specific voice to use (default: `en-US-Chirp3-HD-Zephyr`). |
 | `--list-voices` | Display a table of available Chirp voices. |
+| `--sample-voices` | Iterate through and play a short sample of each available voice. |
 | `--language-code` | Language code (default: `en-US`). |
 | `--project-id` | Google Cloud Project ID (overrides env var). |
 

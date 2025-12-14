@@ -105,6 +105,13 @@ def main():
         "--list-voices", action="store_true",
         help="List all available 'en-US' 'Chirp3' voices in a table and exit."
     )
+    voice_group.add_argument(
+        "--sample-voices", action="store_true",
+        help=(
+            "Iterate through all available 'Chirp3' voices, playing a short "
+            "sample of each (e.g., 'Hello, I am [Voice Name]')."
+        )
+    )
 
     # --- Project Configuration ---
     project_group = parser.add_argument_group('Project Configuration')
@@ -125,6 +132,45 @@ def main():
             try:
                 valid_voices = list_chirp_voices()
                 list_voices_table(valid_voices)
+            except RuntimeError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+            return
+
+        if args.sample_voices:
+            try:
+                valid_voices = list_chirp_voices(args.language_code)
+                if not valid_voices:
+                    print(f"No voices found for language '{args.language_code}'.", file=sys.stderr)
+                    sys.exit(1)
+                
+                print(f"Found {len(valid_voices)} voices. Starting sampling...", file=sys.stderr)
+                print("Press Ctrl+C to stop.", file=sys.stderr)
+
+                for voice in valid_voices:
+                    print(f"\nSampling voice: {voice.name}", file=sys.stderr)
+                    sample_text = f"Hello, I am {voice.name}."
+                    
+                    suffix = f".{args.audio_format.lower()}"
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as temp_audio_file:
+                        temp_filename = temp_audio_file.name
+                        try:
+                            generate_speech(
+                                text=sample_text,
+                                output_file=temp_filename,
+                                voice_name=voice.name,
+                                language_code=args.language_code,
+                                audio_format=args.audio_format,
+                                project_id=args.project_id
+                            )
+                            if not args.no_play:
+                                play_audio(temp_filename)
+                        except RuntimeError as e:
+                            print(f"Error sampling {voice.name}: {e}", file=sys.stderr)
+                            # Continue to next voice instead of exiting
+                            continue
+                
+                print("\nSampling complete.", file=sys.stderr)
             except RuntimeError as e:
                 print(f"Error: {e}", file=sys.stderr)
                 sys.exit(1)
