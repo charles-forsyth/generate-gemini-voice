@@ -14,6 +14,12 @@ def test_client_init_with_api_key():
                 MockOptions.assert_called_with(api_key='TEST_API_KEY')
                 MockClient.assert_called_once_with(client_options=MockOptions.return_value)
 
+def test_client_init_with_placeholder_key():
+    """Test that TextToSpeechClient raises RuntimeError when API key is the placeholder."""
+    with patch.object(settings, 'google_api_key', 'replace_with_your_api_key'):
+        with pytest.raises(RuntimeError, match="Placeholder API Key detected"):
+            get_text_to_speech_client()
+
 def test_client_init_without_api_key():
     """Test that TextToSpeechClient initialization raises RuntimeError when API key is None."""
     with patch.object(settings, 'google_api_key', None):
