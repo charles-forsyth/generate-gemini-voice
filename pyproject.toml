@@ -1,6 +1,6 @@
 [project]
 name = "generate-gemini-voice"
-version = "0.1.13"
+version = "0.1.14"
 description = "A modern CLI tool for generating voice using Google Cloud Text-to-Speech."
 readme = "README.md"
 requires-python = ">=3.9"

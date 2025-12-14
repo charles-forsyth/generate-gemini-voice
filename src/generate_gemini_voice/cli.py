@@ -215,7 +215,6 @@ For more details, visit: https://github.com/charles-forsyth/generate-gemini-voic
         elif args.text:
             text_to_synthesize = args.text
         elif not sys.stdin.isatty():
-            print("Reading from pipe (stdin)...", file=sys.stderr)
             text_to_synthesize = sys.stdin.read().strip()
 
         if not text_to_synthesize:
