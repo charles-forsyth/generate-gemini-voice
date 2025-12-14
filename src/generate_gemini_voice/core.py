@@ -1,11 +1,19 @@
 from typing import Optional
 from google.cloud import texttospeech
 from google.api_core import exceptions
+import google.auth.exceptions
 from generate_gemini_voice.config import settings
 
 def get_text_to_speech_client() -> texttospeech.TextToSpeechClient:
     """Returns an authenticated TextToSpeechClient."""
-    return texttospeech.TextToSpeechClient()
+    try:
+        return texttospeech.TextToSpeechClient()
+    except google.auth.exceptions.DefaultCredentialsError as e:
+        raise RuntimeError(
+            "Google Cloud Credentials not found.\n"
+            "Please run 'gcloud auth application-default login' "
+            "or set the GOOGLE_APPLICATION_CREDENTIALS environment variable."
+        ) from e
 
 def list_chirp_voices(language_code: str = "en-US") -> list[texttospeech.Voice]:
     """Returns a list of available 'Chirp3' voices for the given language."""

@@ -27,17 +27,46 @@ def list_voices_table(voice_list: list[texttospeech.Voice]):
 
 def main():
     """Parses command-line arguments and calls the voice generation function."""
+    epilog_examples = """
+EXAMPLES:
+
+  1. Generate and play a simple sentence (Preview mode):
+     generate-voice "Hello, world! This is a test." --temp
+
+  2. Save speech to a specific MP3 file:
+     generate-voice "This is a permanent recording." --output-file recording.mp3
+
+  3. Use a specific high-definition voice model:
+     # First, list available voices:
+     generate-voice --list-voices
+     # Then use a specific name:
+     generate-voice "I have a specific voice." --voice-name en-US-Chirp3-HD-Zephyr
+
+  4. Read text from a file and save as WAV:
+     generate-voice --input-file script.txt --output-file output.wav --audio-format WAV
+
+  5. Pipe text from another command:
+     echo "System update complete." | generate-voice --temp
+
+  6. Sample all available voices to find your favorite:
+     generate-voice --sample-voices
+
+CONFIGURATION:
+  Ensure you have Google Cloud credentials set up:
+  $ gcloud auth application-default login
+  
+  Or set the environment variable:
+  $ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
+
+For more details, visit: https://github.com/charles-forsyth/generate-gemini-voice
+"""
     parser = argparse.ArgumentParser(
         description=(
             "Generate high-quality speech from text using Google Cloud's "
-            "latest 'Chirp' models.\n\n"
-            "Examples:\n"
-            "  generate-voice \"Hello world\" --temp\n"
-            "  generate-voice --input-file script.txt --output-file audio.mp3\n"
-            "  echo \"Piped text\" | generate-voice --temp"
+            "latest 'Chirp' models."
         ),
-        formatter_class=argparse.RawTextHelpFormatter,
-        epilog="For more details, visit: https://github.com/charles-forsyth/generate-gemini-voice"
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog_examples
     )
 
     # --- Input Arguments ---
