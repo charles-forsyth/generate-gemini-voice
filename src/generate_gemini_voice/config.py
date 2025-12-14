@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=[".env", str(Path.home() / ".env")],
+        env_file=[".env", str(Path.home() / ".env"), str(Path.home() / ".config" / "generate-gemini-voice" / ".env")],
         env_file_encoding="utf-8",
         extra="ignore"
     )
