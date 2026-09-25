@@ -1,5 +1,9 @@
+import shutil
 import struct
+import subprocess
 import sys
+import time
+import wave
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -17,20 +21,27 @@ from generate_gemini_voice.config import (
 from generate_gemini_voice.utils import split_text_into_chunks
 
 # --- Models -----------------------------------------------------------------
-# "chirp3" = classic Chirp 3 HD voices (API key works).
-# gemini-* = Gemini-TTS: steerable with a natural-language --prompt.
-#   These route through Vertex AI, which does NOT accept API keys, so they use
-#   gcloud application-default credentials (gcloud auth application-default login).
+# Three backends:
+#   Gemini API  (GEMINI_API_KEY): gemini-3.8-* TTS. Newest, stable (Sep 2026).
+#   Cloud TTS + ADC:              gemini-2.5-*-tts. GA on Cloud TTS; fallback.
+#   Cloud TTS + API key:          chirp3 (classic Chirp 3 HD voices).
+# Dropped: gemini-3.1-flash-tts-preview (Google marks it legacy) and
+# gemini-2.5-flash-lite-preview-tts (never went GA).
 CHIRP_MODEL = "chirp3"
-GEMINI_MODELS = (
-    "gemini-2.5-flash-tts",  # GA, fast, cheap: default
-    "gemini-2.5-pro-tts",  # GA, highest quality
-    "gemini-3.1-flash-tts-preview",  # newest, preview
-    "gemini-2.5-flash-lite-preview-tts",
+GEMINI_API_MODELS = (
+    "gemini-3.8-flash-tts",  # default: best quality, voice direction
+    "gemini-3.8-flash-lite-tts",  # cheaper, faster
 )
-DEFAULT_MODEL = "gemini-2.5-flash-tts"
+CLOUD_GEMINI_MODELS = (
+    "gemini-2.5-flash-tts",  # GA on Cloud TTS
+    "gemini-2.5-pro-tts",  # GA on Cloud TTS
+)
+GEMINI_MODELS = (*GEMINI_API_MODELS, *CLOUD_GEMINI_MODELS)
+DEFAULT_MODEL = "gemini-3.8-flash-tts"
 DEFAULT_VOICE = "Zephyr"
-MODEL_CHOICES = (CHIRP_MODEL, *GEMINI_MODELS)
+MODEL_CHOICES = (*GEMINI_MODELS, CHIRP_MODEL)
+# Gemini API returns raw 16-bit mono PCM at 24 kHz.
+PCM_RATE = 24000
 
 # Shared by Chirp 3 HD and Gemini-TTS.
 VOICES = (
@@ -83,6 +94,126 @@ _RETRY = api_retry.Retry(
 
 def is_gemini(model: str) -> bool:
     return model.startswith("gemini-")
+
+
+def is_gemini_api(model: str) -> bool:
+    return model in GEMINI_API_MODELS
+
+
+def _gemini_api_key() -> str:
+    key = settings.gemini_api_key
+    if not key or PLACEHOLDER_KEY in key:
+        raise RuntimeError(
+            f"GEMINI_API_KEY not set in {USER_CONFIG_FILE}.\n"
+            "Create a key restricted to generativelanguage.googleapis.com, or use\n"
+            "--model gemini-2.5-flash-tts (Cloud TTS) or --model chirp3."
+        )
+    return key
+
+
+def _gemini_api_chunk(client, text: str, model: str, voice: str, prompt) -> bytes:
+    """One Gemini API TTS call. Returns raw 16-bit PCM (24 kHz mono)."""
+    from google.genai import errors as genai_errors
+    from google.genai import types
+
+    contents = f"{prompt.strip()}\n\n{text}" if prompt else text
+    config = types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice)
+            )
+        ),
+    )
+    delay = 1.0
+    for attempt in range(6):
+        try:
+            resp = client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+            data = resp.candidates[0].content.parts[0].inline_data.data
+            if data[:4] == b"RIFF":  # some responses arrive as WAV
+                data = data[44:]
+            return data
+        except genai_errors.APIError as e:
+            code = getattr(e, "code", 0) or 0
+            if code in (429, 500, 503, 504) and attempt < 5:
+                time.sleep(delay)
+                delay = min(delay * 2, 20)
+                continue
+            snippet = text[:50] + "..." if len(text) > 50 else text
+            if code in (400, 401, 403) and "key" in str(e).lower():
+                raise RuntimeError(
+                    f"Gemini API rejected key {mask_key(settings.gemini_api_key)} "
+                    "(deleted, or not allowed for generativelanguage.googleapis.com)."
+                ) from e
+            raise RuntimeError(
+                f"Speech synthesis failed for chunk '{snippet}': {e}"
+            ) from e
+    raise RuntimeError("Speech synthesis failed after retries.")
+
+
+def _write_pcm(pcm: bytes, output_file: str, audio_format: str) -> None:
+    """Write PCM as WAV, or encode to MP3/OGG with ffmpeg."""
+    if audio_format == "WAV":
+        with wave.open(output_file, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(PCM_RATE)
+            w.writeframes(pcm)
+        return
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError(
+            f"ffmpeg is needed to write {audio_format} from Gemini 3.8 models. "
+            "Install ffmpeg or use --audio-format WAV."
+        )
+    codec = (
+        ["-c:a", "libmp3lame", "-q:a", "2"]
+        if audio_format == "MP3"
+        else ["-c:a", "libopus", "-b:a", "48k"]
+    )
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "s16le",
+            "-ar",
+            str(PCM_RATE),
+            "-ac",
+            "1",
+            "-i",
+            "pipe:0",
+            *codec,
+            output_file,
+        ],
+        input=pcm,
+        check=True,
+    )
+
+
+def _generate_gemini_api(text, output_file, voice, model, prompt, audio_format):
+    from google import genai
+
+    client = genai.Client(api_key=_gemini_api_key())
+    chunks = split_text_into_chunks(text)
+    total = len(chunks)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        parts = []
+        for i, pcm in enumerate(
+            pool.map(
+                lambda c: _gemini_api_chunk(client, c, model, voice, prompt), chunks
+            )
+        ):
+            if total > 1:
+                print(f"Processing chunk {i + 1}/{total}...", file=sys.stderr, end="\r")
+            parts.append(pcm)
+    if total > 1:
+        print(f"\nFinished processing {total} chunks.", file=sys.stderr)
+    _write_pcm(b"".join(parts), output_file, audio_format)
 
 
 def resolve_voice(voice: str, model: str, language_code: str) -> str:
@@ -207,6 +338,11 @@ def generate_speech(
         raise ValueError(f"Unsupported audio format: {audio_format}")
     if model not in MODEL_CHOICES:
         raise ValueError(f"Unsupported model: {model}. Choose from {MODEL_CHOICES}")
+
+    if is_gemini_api(model):
+        voice = resolve_voice(voice_name, model, language_code)
+        _generate_gemini_api(text, output_file, voice, model, prompt, audio_format)
+        return
 
     client = get_text_to_speech_client(model, project_id)
     voice = resolve_voice(voice_name, model, language_code)

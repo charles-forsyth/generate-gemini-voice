@@ -2,9 +2,14 @@ import argparse
 import os
 import sys
 import tempfile
+import warnings
 
-from generate_gemini_voice.config import ensure_config_exists, settings
-from generate_gemini_voice.core import (
+# google-auth warns on every run that grpcio < 1.83 lacks post-quantum TLS.
+# grpcio 1.83 needs Python > 3.9 (our floor); enforcement starts April 2027.
+warnings.filterwarnings("ignore", message=".*Post-Quantum.*", category=FutureWarning)
+
+from generate_gemini_voice.config import ensure_config_exists, settings  # noqa: E402
+from generate_gemini_voice.core import (  # noqa: E402
     CHIRP_MODEL,
     DEFAULT_MODEL,
     DEFAULT_VOICE,
@@ -12,17 +17,20 @@ from generate_gemini_voice.core import (
     generate_speech,
     list_voices,
 )
-from generate_gemini_voice.utils import create_filename, play_audio
+from generate_gemini_voice.utils import create_filename, play_audio  # noqa: E402
 
 EPILOG = """
 MODELS:
-  gemini-2.5-flash-tts          Default. Gemini-TTS, natural, steerable with --prompt.
-  gemini-2.5-pro-tts            Highest quality Gemini-TTS.
-  gemini-3.1-flash-tts-preview  Newest (preview).
-  chirp3                        Classic Chirp 3 HD voices; uses your API key.
+  gemini-3.8-flash-tts       Default. Newest (Sep 2026), best quality, --prompt direction.
+  gemini-3.8-flash-lite-tts  Cheaper and faster 3.8 model.
+  gemini-2.5-flash-tts       GA on Cloud TTS (fallback).
+  gemini-2.5-pro-tts         GA on Cloud TTS, higher quality (fallback).
+  chirp3                     Classic Chirp 3 HD voices.
 
-  Gemini models need: gcloud auth application-default login
-  chirp3 needs GOOGLE_API_KEY in ~/.config/generate-gemini-voice/.env
+  3.8 models need GEMINI_API_KEY (restricted to generativelanguage.googleapis.com).
+  2.5 models need: gcloud auth application-default login
+  chirp3 needs GOOGLE_API_KEY (restricted to texttospeech.googleapis.com).
+  Keys live in ~/.config/generate-gemini-voice/.env
 
 EXAMPLES:
   generate-voice "Hello, world." --temp
