@@ -113,4 +113,8 @@ def test_generate_speech_api_error(mock_tts_client, tmp_path):
         "Error"
     )
     with pytest.raises(RuntimeError, match="Speech synthesis failed"):
-        generate_speech(text="Hi", output_file=str(tmp_path / "out.mp3"))
+        generate_speech(
+            text="Hi",
+            output_file=str(tmp_path / "out.mp3"),
+            model="gemini-2.5-flash-tts",
+        )

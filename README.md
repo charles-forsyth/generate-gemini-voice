@@ -1,13 +1,14 @@
 # Generate Gemini Voice
 
-A CLI for generating speech from text with Google Cloud Text-to-Speech. It
-supports the newer **Gemini-TTS** models (natural voices you can direct with a
-plain-language `--prompt`) and the classic **Chirp 3 HD** voices.
+A CLI for generating speech from text with Google's TTS models. It defaults to
+**Gemini 3.8 Flash TTS** (released Sep 2026, directable with a plain-language
+`--prompt`), with Gemini 2.5 TTS and classic **Chirp 3 HD** voices as fallbacks.
 
 ## Features
 
-- **Gemini-TTS by default** (`gemini-2.5-flash-tts`), with `gemini-2.5-pro-tts`
-  and `gemini-3.1-flash-tts-preview` available. Steer delivery with `--prompt`,
+- **Gemini 3.8 TTS by default** (`gemini-3.8-flash-tts`), plus
+  `gemini-3.8-flash-lite-tts`, and the GA Cloud TTS models `gemini-2.5-flash-tts`
+  and `gemini-2.5-pro-tts`. Steer delivery with `--prompt`,
   e.g. `--prompt "Read like a calm morning briefing."`
 - **Chirp 3 HD** voices via `--model chirp3`.
 - **Flexible input:** text argument, `--input-file`, or stdin.
@@ -33,11 +34,13 @@ The two model families authenticate differently:
 
 | Model | Auth | Setup |
 | :--- | :--- | :--- |
-| `gemini-*` (default) | Google application-default credentials | `gcloud auth application-default login` |
-| `chirp3` | API key | `GOOGLE_API_KEY` in the config file |
+| `gemini-3.8-*` (default) | Gemini API key | `GEMINI_API_KEY`, restricted to `generativelanguage.googleapis.com` |
+| `gemini-2.5-*-tts` | Google application-default credentials | `gcloud auth application-default login` |
+| `chirp3` | Cloud TTS API key | `GOOGLE_API_KEY`, restricted to `texttospeech.googleapis.com` |
 
-Gemini-TTS runs through Vertex AI, which does not accept API keys. The project in
-`GCLOUD_PROJECT` (or `--project-id`) is billed.
+Gemini 3.8 TTS is only on the Gemini API today (not yet on Cloud TTS/Vertex).
+Output from it is converted to MP3/OGG with `ffmpeg`; WAV needs nothing extra.
+Gemini 2.5 TTS runs through Cloud TTS, which bills `GCLOUD_PROJECT`.
 
 ### Config file
 
@@ -47,14 +50,15 @@ The file is created on first run with owner-only (600) permissions, and
 permissions are tightened automatically if they are ever looser.
 
 ```env
-GOOGLE_API_KEY=your-key-here        # only needed for --model chirp3
+GEMINI_API_KEY=your-gemini-key     # default 3.8 models
+GOOGLE_API_KEY=your-tts-key        # only needed for --model chirp3
 GCLOUD_PROJECT=your-project-id
 PYGAME_HIDE_SUPPORT_PROMPT=1
 ```
 
 A real environment variable still overrides the file for a single run.
 
-**Key hygiene:** restrict the API key to `texttospeech.googleapis.com` only.
+**Key hygiene:** use one key per purpose, each restricted to its single API.
 Error messages show only the last 4 characters of a key.
 
 ## Usage
@@ -70,7 +74,7 @@ generate-voice --input-file notes.txt --temp --prompt "Read slowly and warmly."
 generate-voice "Big news today!" --voice Puck --output-file news.mp3
 
 # Highest quality model
-generate-voice "Premium read." --model gemini-2.5-pro-tts --temp
+generate-voice "Cheaper read." --model gemini-3.8-flash-lite-tts --temp
 
 # Classic Chirp 3 HD with an API key
 generate-voice "Classic voice." --model chirp3 --temp
@@ -99,7 +103,7 @@ Full Chirp names such as `en-US-Chirp3-HD-Zephyr` also work.
 | `--audio-format` | `MP3` (default), `WAV`, `OGG`. |
 | `--temp` | Play from a temp file, then delete it. |
 | `--no-play` | Save without playing. |
-| `--model` | `gemini-2.5-flash-tts` (default), `gemini-2.5-pro-tts`, `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-lite-preview-tts`, `chirp3`. |
+| `--model` | `gemini-3.8-flash-tts` (default), `gemini-3.8-flash-lite-tts`, `gemini-2.5-flash-tts`, `gemini-2.5-pro-tts`, `chirp3`. |
 | `--voice NAME` | Voice name (default `Zephyr`). `--voice-name` still works. |
 | `--prompt TEXT` | Style direction for Gemini models. Ignored for `chirp3`. |
 | `--language-code` | Default `en-US`. |

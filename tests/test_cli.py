@@ -27,7 +27,15 @@ def test_cli_generate_text(mock_tts_client, mock_pygame, tmp_path):
     with patch.object(
         sys,
         "argv",
-        ["generate-voice", "Hello World", "--output-file", str(output), "--no-play"],
+        [
+            "generate-voice",
+            "Hello World",
+            "--output-file",
+            str(output),
+            "--no-play",
+            "--model",
+            "gemini-2.5-flash-tts",
+        ],
     ):
         main()
     mock_tts_client.synthesize_speech.assert_called_once()
@@ -41,7 +49,15 @@ def test_cli_generate_temp_cleans_up(
     with patch.object(
         sys,
         "argv",
-        ["generate-voice", "Hello World", "--temp", "--prompt", "Read calmly."],
+        [
+            "generate-voice",
+            "Hello World",
+            "--temp",
+            "--prompt",
+            "Read calmly.",
+            "--model",
+            "gemini-2.5-flash-tts",
+        ],
     ):
         main()
     mock_tts_client.synthesize_speech.assert_called_once()

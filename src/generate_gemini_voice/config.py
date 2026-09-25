@@ -27,9 +27,12 @@ def ensure_config_exists() -> None:
             with os.fdopen(fd, "w") as f:
                 f.write(
                     f"# Configuration for {APP_NAME}\n"
-                    "# API key: restrict it to texttospeech.googleapis.com only.\n"
-                    "# Used for Chirp 3 HD voices. Gemini-TTS models use your\n"
-                    "# gcloud application-default credentials instead.\n\n"
+                    "# GEMINI_API_KEY: restrict to generativelanguage.googleapis.com.\n"
+                    "#   Used by the default Gemini 3.8 TTS models.\n"
+                    "# GOOGLE_API_KEY: restrict to texttospeech.googleapis.com.\n"
+                    "#   Used for Chirp 3 HD voices. Gemini 2.5 TTS models use\n"
+                    "#   gcloud application-default credentials instead.\n\n"
+                    f"GEMINI_API_KEY={PLACEHOLDER_KEY}\n"
                     f"GOOGLE_API_KEY={PLACEHOLDER_KEY}\n"
                     "GCLOUD_PROJECT=replace_with_your_project_id\n"
                     "PYGAME_HIDE_SUPPORT_PROMPT=1\n"
@@ -69,6 +72,11 @@ def mask_key(key: Optional[str]) -> str:
 class Settings(BaseSettings):
     google_api_key: Optional[str] = Field(
         default=None, validation_alias="GOOGLE_API_KEY"
+    )
+    # Gemini API key (restrict to generativelanguage.googleapis.com). Used for
+    # the Gemini 3.8 TTS models, which are only on the Gemini API today.
+    gemini_api_key: Optional[str] = Field(
+        default=None, validation_alias="GEMINI_API_KEY"
     )
     gcloud_project: str = Field(
         default="ucr-research-computing", validation_alias="GCLOUD_PROJECT"
