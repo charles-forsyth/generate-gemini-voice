@@ -1,285 +1,217 @@
 import argparse
-import sys
 import os
+import sys
 import tempfile
-from typing import Optional
 
-from generate_gemini_voice.core import list_chirp_voices, generate_speech
+from generate_gemini_voice.config import ensure_config_exists, settings
+from generate_gemini_voice.core import (
+    CHIRP_MODEL,
+    DEFAULT_MODEL,
+    DEFAULT_VOICE,
+    MODEL_CHOICES,
+    generate_speech,
+    list_voices,
+)
 from generate_gemini_voice.utils import create_filename, play_audio
-from generate_gemini_voice.config import settings, ensure_config_exists
-from google.cloud import texttospeech
 
-def list_voices_table(voice_list: list[texttospeech.Voice]):
-    """Prints the available voices in a formatted table."""
-    if not voice_list:
-        print("No 'en-US' 'Chirp3' voices could be fetched.", file=sys.stderr)
-        return
+EPILOG = """
+MODELS:
+  gemini-2.5-flash-tts          Default. Gemini-TTS, natural, steerable with --prompt.
+  gemini-2.5-pro-tts            Highest quality Gemini-TTS.
+  gemini-3.1-flash-tts-preview  Newest (preview).
+  chirp3                        Classic Chirp 3 HD voices; uses your API key.
 
-    max_name_len = max(len(v.name) for v in voice_list) if voice_list else 20
+  Gemini models need: gcloud auth application-default login
+  chirp3 needs GOOGLE_API_KEY in ~/.config/generate-gemini-voice/.env
 
-    print("Available 'en-US' 'Chirp3' Voices:")
-    print(f"{ 'Name':<{max_name_len}}  {'Gender':<6}")
-    print(f"{ '=' * max_name_len}  {'=' * 6}")
-
-    for voice in voice_list:
-        ssml_gender = texttospeech.SsmlVoiceGender(voice.ssml_gender).name
-        print(f"{voice.name:<{max_name_len}}  {ssml_gender:<6}")
-
-def main():
-    """Parses command-line arguments and calls the voice generation function."""
-    
-    # Ensure config exists and permissions are secure
-    ensure_config_exists()
-
-    epilog_examples = """
 EXAMPLES:
-
-  1. Generate and play a simple sentence (Preview mode):
-     generate-voice "Hello, world! This is a test." --temp
-
-  2. Save speech to a specific MP3 file:
-     generate-voice "This is a permanent recording." --output-file recording.mp3
-
-  3. Use a specific high-definition voice model:
-     # First, list available voices:
-     generate-voice --list-voices
-     # Then use a specific name:
-     generate-voice "I have a specific voice." --voice-name en-US-Chirp3-HD-Zephyr
-
-  4. Read text from a file and save as WAV:
-     generate-voice --input-file script.txt --output-file output.wav --audio-format WAV
-
-  5. Pipe text from another command:
-     echo "System update complete." | generate-voice --temp
-
-  6. Sample all available voices to find your favorite:
-     generate-voice --sample-voices
-
-CONFIGURATION:
-  To authenticate with Google Cloud, set your API key in a .env file:
-  $ echo "GOOGLE_API_KEY=AIzaSy...YourAPIKey..." >> .env
-  $ echo "GCLOUD_PROJECT=your-google-cloud-project-id" >> .env
-
-For more details, visit: https://github.com/charles-forsyth/generate-gemini-voice
+  generate-voice "Hello, world." --temp
+  generate-voice --input-file notes.txt --temp --prompt "Read like a calm briefing."
+  generate-voice "Big news!" --voice Puck --prompt "Say this excitedly."
+  generate-voice "Save this." --output-file out.mp3
+  generate-voice "Classic voice." --model chirp3 --temp
+  echo "System update complete." | generate-voice --temp
+  generate-voice --list-voices
+  generate-voice --sample-voices
 """
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate high-quality speech from text using Google Cloud's "
-            "latest 'Chirp' models."
-        ),
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Generate speech with Google Cloud Text-to-Speech (Gemini-TTS or Chirp 3 HD).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=epilog_examples
+        epilog=EPILOG,
+    )
+    i = p.add_argument_group("Input (provide one)")
+    i.add_argument(
+        "text",
+        nargs="?",
+        default=None,
+        help="Text to speak. Or use --input-file or pipe stdin.",
+    )
+    i.add_argument("--input-file", metavar="FILE", help="Read text from a file.")
+
+    o = p.add_argument_group("Output")
+    o.add_argument(
+        "--output-file",
+        metavar="FILE",
+        help="Save to this file (default: name from text + timestamp).",
+    )
+    o.add_argument(
+        "--audio-format", default="MP3", choices=["MP3", "WAV", "OGG"], type=str.upper
+    )
+    o.add_argument(
+        "--temp",
+        action="store_true",
+        help="Play from a temporary file, then delete it.",
+    )
+    o.add_argument(
+        "--no-play", action="store_true", help="Do not play after generating."
     )
 
-    # --- Input Arguments ---
-    input_group = parser.add_argument_group('Input Options (provide one)')
-    input_group.add_argument(
-        "text", nargs="?", type=str, default=None,
-        help=(
-            "The text to synthesize. Optional if using --input-file or piping "
-            "text via stdin."
-        )
+    v = p.add_argument_group("Voice")
+    v.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        choices=MODEL_CHOICES,
+        help=f"Default: {DEFAULT_MODEL}",
     )
-    input_group.add_argument(
-        "--input-file", type=str, metavar="FILE",
-        help="Read the text to synthesize from a specific file path."
+    v.add_argument(
+        "--voice",
+        "--voice-name",
+        dest="voice",
+        default=DEFAULT_VOICE,
+        metavar="NAME",
+        help=f"Voice name, e.g. Zephyr, Kore, Charon, Puck (default: {DEFAULT_VOICE}).",
     )
-
-    # --- Output Arguments ---
-    output_group = parser.add_argument_group('Output Options')
-    output_group.add_argument(
-        "--output-file", type=str, metavar="FILE", default=None,
-        help=(
-            "Save the generated audio to this file. If omitted, a filename "
-            "is automatically generated based on the text and timestamp. "
-            "Ignored if --temp is used."
-        )
+    v.add_argument(
+        "--prompt",
+        metavar="TEXT",
+        help="Style direction for Gemini models, e.g. 'Read slowly and warmly.' Ignored for chirp3.",
     )
-    output_group.add_argument(
-        "--audio-format", type=str, default="MP3",
-        choices=["MP3", "WAV", "OGG"],
-        help=(
-            "The audio file format. 'MP3' (default) is widely compatible. "
-            "'WAV' is uncompressed linear PCM. 'OGG' uses the Opus codec."
-        )
+    v.add_argument("--language-code", default="en-US", metavar="CODE")
+    v.add_argument(
+        "--list-voices",
+        action="store_true",
+        help="List voices for the chosen model and exit.",
     )
-    output_group.add_argument(
-        "--temp", action="store_true",
-        help=(
-            "Generate the audio to a temporary file, play it immediately, "
-            "and then delete it. Useful for quick previews."
-        )
-    )
-    output_group.add_argument(
-        "--no-play", action="store_true",
-        help=(
-            "Disable automatic playback of the generated audio file. "
-            "Default behavior is to play after generation."
-        )
+    v.add_argument(
+        "--sample-voices",
+        action="store_true",
+        help="Play a short sample of each voice.",
     )
 
-    # --- Voice Configuration ---
-    voice_group = parser.add_argument_group('Voice Configuration')
-    voice_group.add_argument(
-        "--language-code", type=str, default="en-US", metavar="CODE",
-        help="The BCP-47 language code for the voice (default: 'en-US')."
+    g = p.add_argument_group("Project")
+    g.add_argument(
+        "--project-id",
+        default=settings.gcloud_project,
+        metavar="ID",
+        help="Project billed for Gemini-TTS (default: GCLOUD_PROJECT or ucr-research-computing).",
     )
-    voice_group.add_argument(
-        "--voice-name", type=str, default="en-US-Chirp3-HD-Zephyr", metavar="NAME",
-        help=(
-            "The specific Google Cloud Voice name to use. "
-            "Default: 'en-US-Chirp3-HD-Zephyr'. "
-            "Use --list-voices to see all available options."
-        )
-    )
-    voice_group.add_argument(
-        "--list-voices", action="store_true",
-        help="List all available 'en-US' 'Chirp3' voices in a table and exit."
-    )
-    voice_group.add_argument(
-        "--sample-voices", action="store_true",
-        help=(
-            "Iterate through all available 'Chirp3' voices, playing a short "
-            "sample of each (e.g., 'Hello, I am [Voice Name]')."
-        )
-    )
+    return p
 
-    # --- Project Configuration ---
-    project_group = parser.add_argument_group('Project Configuration')
-    project_group.add_argument(
-        "--project-id", type=str, default=settings.gcloud_project, metavar="ID",
-        help=(
-            "The Google Cloud Project ID to bill for usage. "
-            "Defaults to the 'GCLOUD_PROJECT' environment variable "
-            "or 'ucr-research-computing'."
-        )
-    )
 
+def read_input(args, parser) -> str:
+    if args.input_file:
+        if args.text:
+            parser.error("use either a text argument or --input-file, not both.")
+        with open(args.input_file, encoding="utf-8") as f:
+            return f.read().strip()
+    if args.text:
+        return args.text
+    if not sys.stdin.isatty():
+        return sys.stdin.read().strip()
+    return ""
+
+
+def _temp_path(audio_format: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=f".{audio_format.lower()}", prefix="genvoice_")
+    os.close(fd)
+    return path
+
+
+def main() -> None:
+    ensure_config_exists()
+    parser = build_parser()
     args = parser.parse_args()
 
-    # --- Logic ---
+    if args.prompt and args.model == CHIRP_MODEL:
+        print("Note: --prompt is ignored for chirp3.", file=sys.stderr)
+
     try:
         if args.list_voices:
-            try:
-                valid_voices = list_chirp_voices()
-                list_voices_table(valid_voices)
-            except RuntimeError as e:
-                print(f"Error: {e}", file=sys.stderr)
-                sys.exit(1)
+            for name in list_voices(args.model, args.language_code):
+                print(name)
             return
 
         if args.sample_voices:
-            try:
-                valid_voices = list_chirp_voices(args.language_code)
-                if not valid_voices:
-                    print(f"No voices found for language '{args.language_code}'.", file=sys.stderr)
-                    sys.exit(1)
-                
-                print(f"Found {len(valid_voices)} voices. Starting sampling...", file=sys.stderr)
-                print("Press Ctrl+C to stop.", file=sys.stderr)
-
-                for voice in valid_voices:
-                    print(f"\nSampling voice: {voice.name}", file=sys.stderr)
-                    sample_text = f"Hello, I am {voice.name}."
-                    
-                    suffix = f".{args.audio_format.lower()}"
-                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as temp_audio_file:
-                        temp_filename = temp_audio_file.name
-                        try:
-                            generate_speech(
-                                text=sample_text,
-                                output_file=temp_filename,
-                                voice_name=voice.name,
-                                language_code=args.language_code,
-                                audio_format=args.audio_format,
-                                project_id=args.project_id
-                            )
-                            if not args.no_play:
-                                play_audio(temp_filename)
-                        except RuntimeError as e:
-                            print(f"Error sampling {voice.name}: {e}", file=sys.stderr)
-                            # Continue to next voice instead of exiting
-                            continue
-                
-                print("\nSampling complete.", file=sys.stderr)
-            except RuntimeError as e:
-                print(f"Error: {e}", file=sys.stderr)
-                sys.exit(1)
+            voices = list_voices(args.model, args.language_code)
+            print(
+                f"Sampling {len(voices)} voices ({args.model}). Ctrl+C to stop.",
+                file=sys.stderr,
+            )
+            for name in voices:
+                short = name.split("-")[-1]
+                print(f"  {short}", file=sys.stderr)
+                path = _temp_path(args.audio_format)
+                try:
+                    generate_speech(
+                        text=f"Hello, I am {short}.",
+                        output_file=path,
+                        voice_name=name,
+                        language_code=args.language_code,
+                        audio_format=args.audio_format,
+                        project_id=args.project_id,
+                        model=args.model,
+                        prompt=args.prompt,
+                    )
+                    if not args.no_play:
+                        play_audio(path)
+                except RuntimeError as e:
+                    print(f"    skipped: {e}", file=sys.stderr)
+                finally:
+                    os.unlink(path)
             return
 
-        text_to_synthesize = ""
-        # Check for input in order of precedence: --input-file, 
-        # then text argument, then piped data.
-        if args.input_file:
-            if args.text:
-                parser.error("argument --input-file: not allowed with a "
-                             "text argument.")
-            with open(args.input_file, 'r') as f:
-                text_to_synthesize = f.read()
-        elif args.text:
-            text_to_synthesize = args.text
-        elif not sys.stdin.isatty():
-            text_to_synthesize = sys.stdin.read().strip()
-
-        if not text_to_synthesize:
-            parser.error(
-                "No input provided. Please provide text as an argument, use "
-                "--input-file, or pipe text to the script."
-            )
-
+        text = read_input(args, parser)
+        if not text:
+            parser.error("no input: give text, --input-file, or pipe text in.")
         if args.temp and args.no_play:
             parser.error("--temp cannot be used with --no-play.")
 
-        # Validate voice name if not listing voices
-        try:
-            all_chirp_voices = list_chirp_voices(args.language_code)
-            valid_voice_names = [v.name for v in all_chirp_voices]
-        except RuntimeError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        if args.voice_name not in valid_voice_names:
-            parser.error(
-                f"Invalid voice name: '{args.voice_name}'.\nUse "
-                f"--list-voices to see available options."
-            )
-
-        common_generate_args = {
-            "text": text_to_synthesize,
-            "language_code": args.language_code,
-            "voice_name": args.voice_name,
-            "audio_format": args.audio_format,
-            "project_id": args.project_id,
-        }
+        common = dict(
+            text=text,
+            voice_name=args.voice,
+            language_code=args.language_code,
+            audio_format=args.audio_format,
+            project_id=args.project_id,
+            model=args.model,
+            prompt=args.prompt,
+        )
 
         if args.temp:
             if args.output_file:
-                print("Warning: --output-file is ignored when --temp is used.",
-                      file=sys.stderr)
-            
-            suffix = f".{args.audio_format.lower()}"
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) \
-                    as temp_audio_file:
-                temp_filename = temp_audio_file.name
-                try:
-                    generate_speech(**common_generate_args, output_file=temp_filename)
-                    play_audio(temp_filename)
-                except RuntimeError as e:
-                    print(f"Error: {e}", file=sys.stderr)
-                    sys.exit(1)
-        else:
-            output_filename = (
-                args.output_file or 
-                create_filename(text_to_synthesize, args.audio_format)
-            )
+                print("Warning: --output-file is ignored with --temp.", file=sys.stderr)
+            path = _temp_path(args.audio_format)
             try:
-                generate_speech(**common_generate_args, output_file=output_filename)
-                if not args.no_play:
-                    play_audio(output_filename)
-            except RuntimeError as e:
-                print(f"Error: {e}", file=sys.stderr)
-                sys.exit(1)
+                generate_speech(**common, output_file=path)
+                play_audio(path)
+            finally:
+                os.unlink(path)
+        else:
+            out = args.output_file or create_filename(text, args.audio_format)
+            generate_speech(**common, output_file=out)
+            print(f"Saved: {out}", file=sys.stderr)
+            if not args.no_play:
+                play_audio(out)
 
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user. Exiting.", file=sys.stderr)
-        sys.exit(0)
+        print("\nCancelled.", file=sys.stderr)
+        sys.exit(130)
+
+
+if __name__ == "__main__":
+    main()

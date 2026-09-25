@@ -1,11 +1,11 @@
 [project]
 name = "generate-gemini-voice"
-version = "0.1.18"
-description = "A modern CLI tool for generating voice using Google Cloud Text-to-Speech."
+version = "0.2.0"
+description = "CLI for Google Cloud Text-to-Speech: Gemini-TTS and Chirp 3 HD voices."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "google-cloud-texttospeech>=2.0.0",
+    "google-cloud-texttospeech>=2.29.0",
     "pygame>=2.5.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",

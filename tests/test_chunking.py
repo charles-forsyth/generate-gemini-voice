@@ -80,12 +80,14 @@ def test_generate_speech_streaming_wav(mock_synthesize, tmp_path):
     # Construct Mock WAV chunks
     # Chunk 1: Header + 10 bytes "A"
     header1 = bytearray(44)
+    header1[0:4] = b"RIFF"
     struct.pack_into('<I', header1, 4, 36+10) # ChunkSize
     struct.pack_into('<I', header1, 40, 10)    # Subchunk2Size
     c1 = bytes(header1) + b"A"*10
     
     # Chunk 2: Header + 20 bytes "B"
     header2 = bytearray(44)
+    header2[0:4] = b"RIFF"
     struct.pack_into('<I', header2, 4, 36+20)
     struct.pack_into('<I', header2, 40, 20)
     c2 = bytes(header2) + b"B"*20

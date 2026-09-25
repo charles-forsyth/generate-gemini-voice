@@ -24,7 +24,7 @@ def mock_tts_client(monkeypatch):
     # Patch the core module where the client is instantiated
     monkeypatch.setattr(
         "generate_gemini_voice.core.get_text_to_speech_client",
-        lambda: mock_client
+        lambda *a, **k: mock_client
     )
     return mock_client
 

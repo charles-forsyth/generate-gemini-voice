@@ -16,8 +16,8 @@ import pygame
 
 def create_filename(text: str, audio_format: str) -> str:
     """Creates a sanitized, unique filename from the input text and a timestamp."""
-    sanitized_text = re.sub(r"[^\\w\\s-]", "", text).strip()
-    sanitized_text = re.sub(r"[-\\s]+", "_", sanitized_text)
+    sanitized_text = re.sub(r"[^\w\s-]", "", text).strip()
+    sanitized_text = re.sub(r"[-\s]+", "_", sanitized_text) or "speech"
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     # Truncate to a reasonable length
     base_filename = f"{sanitized_text[:50]}_{timestamp}.{audio_format.lower()}"
@@ -123,15 +123,8 @@ def split_text_into_chunks(text: str, limit: int = 4000) -> list[str]:
                     # Heuristic: Start slightly optimistic, then shrink
                     candidate_str = remaining_sentence[:target_chars + 100] # +padding for variation
                     while len(candidate_str.encode('utf-8')) > limit:
-                        # Too big, slice off end. 
-                        # How much? proportional diff
-                        curr_b = len(candidate_str.encode('utf-8'))
-                        diff = curr_b - limit
-                        # Approximate chars to drop (assume 1 byte/char to be conservative in dropping?)
-                        # No, assume max density to drop faster?
-                        drop_chars = max(1, int(diff / 4)) # assume big chars to drop fewer? No.
-                        # safer: drop 1 char at least.
-                        candidate_str = candidate_str[:-1] 
+                        # Too big: drop one char at a time until it fits.
+                        candidate_str = candidate_str[:-1]
                     
                     # Now candidate_str fits. But is it a clean split?
                     # Try to find a space or punctuation near the end.
