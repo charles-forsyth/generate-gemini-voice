@@ -8,7 +8,7 @@ The codebase is generally well-structured and uses modern Python practices (`pyd
 - **Location:** `src/generate_gemini_voice/core.py` (Lines 13, 22-24, 33-38)
 - **Issue:** The code strictly validates the `GOOGLE_API_KEY` against a hardcoded value (`EXPECTED_API_KEY`).
     ```python
-    EXPECTED_API_KEY = "AIzaSyCTSY0AKGrDHmzSyuV_9MyTBpMGKOKQl2M"
+    EXPECTED_API_KEY = "<REDACTED: dead key removed 2026-09-25>"
     ...
     if api_key == EXPECTED_API_KEY:
         # ... logic ...

@@ -1,135 +1,116 @@
 # Generate Gemini Voice
 
-A modern, professional CLI tool for generating high-quality speech from text using Google Cloud's advanced "Chirp" models. Built with a focus on reproducibility, security, and developer experience.
+A CLI for generating speech from text with Google Cloud Text-to-Speech. It
+supports the newer **Gemini-TTS** models (natural voices you can direct with a
+plain-language `--prompt`) and the classic **Chirp 3 HD** voices.
 
 ## Features
 
-- **Google Cloud Chirp Models:** Access the latest high-definition, realistic voice models.
-- **Secure Configuration:** Safely manages credentials and project IDs via `.env` files and environment variables.
-- **Modern Python:** Built with `pydantic`, `uv`, and adhering to strict type-checking and linting standards.
-- **Flexible Input:** Accepts text input via command-line arguments, files (`--input-file`), or standard input (piping).
-- **Multiple Formats:** Supports MP3, WAV (uncompressed), and OGG (Opus) output formats.
-- **Instant Playback:** Optional `--temp` mode for generating and playing audio without cluttering your filesystem.
+- **Gemini-TTS by default** (`gemini-2.5-flash-tts`), with `gemini-2.5-pro-tts`
+  and `gemini-3.1-flash-tts-preview` available. Steer delivery with `--prompt`,
+  e.g. `--prompt "Read like a calm morning briefing."`
+- **Chirp 3 HD** voices via `--model chirp3`.
+- **Flexible input:** text argument, `--input-file`, or stdin.
+- **MP3, WAV, OGG** output. Long text is chunked, synthesized in parallel, and
+  streamed to disk in order.
+- **`--temp`** plays from a temporary file and deletes it afterward.
+- **Automatic retry** with backoff on rate limits and transient errors.
 
 ## Installation
 
-### Prerequisites
-
-- **Python 3.9+**
-- **uv** (Recommended for fast, reliable package management)
-- **Google Cloud Account** with Text-to-Speech API enabled.
-
-### Installing with `uv` (Recommended)
-
-To install globally as a tool:
-
 ```bash
 uv tool install git+https://github.com/charles-forsyth/generate-gemini-voice.git
-```
-
-To upgrade later:
-
-```bash
+# upgrade later
 uv tool upgrade generate-gemini-voice
 ```
 
-### Installing from Source
+Requires Python 3.9+ and a Google Cloud project with the Text-to-Speech API
+enabled.
 
-```bash
-git clone https://github.com/charles-forsyth/generate-gemini-voice.git
-cd generate-gemini-voice
-uv pip install -e .
-```
+## Authentication
 
-## Configuration
+The two model families authenticate differently:
 
-Authentication is done via a Google Cloud API Key. Set your API key in a `.env` file in one of the following locations (searched in order):
+| Model | Auth | Setup |
+| :--- | :--- | :--- |
+| `gemini-*` (default) | Google application-default credentials | `gcloud auth application-default login` |
+| `chirp3` | API key | `GOOGLE_API_KEY` in the config file |
 
-1.  The **current working directory** where you run the command (`./.env`).
-2.  Your **home directory** (`~/.env`).
-3.  Your **user configuration directory** (`~/.config/generate-gemini-voice/.env`).
+Gemini-TTS runs through Vertex AI, which does not accept API keys. The project in
+`GCLOUD_PROJECT` (or `--project-id`) is billed.
 
-**Example `.env` file:**
+### Config file
+
+The tool reads **only** `~/.config/generate-gemini-voice/.env`. It deliberately
+ignores `./.env` and `~/.env`, which often hold unrelated keys for other tools.
+The file is created on first run with owner-only (600) permissions, and
+permissions are tightened automatically if they are ever looser.
 
 ```env
-GOOGLE_API_KEY=AIzaSy...YourAPIKey...
-GCLOUD_PROJECT=your-google-cloud-project-id
-
-# Optional
+GOOGLE_API_KEY=your-key-here        # only needed for --model chirp3
+GCLOUD_PROJECT=your-project-id
 PYGAME_HIDE_SUPPORT_PROMPT=1
 ```
 
+A real environment variable still overrides the file for a single run.
+
+**Key hygiene:** restrict the API key to `texttospeech.googleapis.com` only.
+Error messages show only the last 4 characters of a key.
+
 ## Usage
 
-The command `generate-voice` is your entry point.
-
-### Basic Usage
-
-Generate and play a simple sentence:
-
 ```bash
-generate-voice "Hello, world! This is a test." --temp
-```
+# Quick preview, played and deleted
+generate-voice "Hello, world." --temp
 
-### Advanced Examples
+# Direct the delivery (Gemini models)
+generate-voice --input-file notes.txt --temp --prompt "Read slowly and warmly."
 
-**1. Save to a specific file (MP3):**
+# Pick a voice and save
+generate-voice "Big news today!" --voice Puck --output-file news.mp3
 
-```bash
-generate-voice "This is a permanent recording." --output-file recording.mp3
-```
+# Highest quality model
+generate-voice "Premium read." --model gemini-2.5-pro-tts --temp
 
-**2. Use a specific voice model:**
+# Classic Chirp 3 HD with an API key
+generate-voice "Classic voice." --model chirp3 --temp
 
-First, list available voices:
-```bash
+# Pipe text in
+echo "System update complete." | generate-voice --temp
+
+# Voices
 generate-voice --list-voices
-```
-
-Then use one:
-```bash
-generate-voice "I have a specific voice." --voice-name en-US-Chirp3-HD-Zephyr
-```
-
-**3. Sample all voices:**
-
-To hear a quick introduction from every available "Chirp" voice:
-```bash
 generate-voice --sample-voices
 ```
 
-**4. Read from a text file and save as WAV:**
+Voices (shared by both families): Achernar, Achird, Algenib, Algieba, Alnilam,
+Aoede, Autonoe, Callirrhoe, Charon, Despina, Enceladus, Erinome, Fenrir, Gacrux,
+Iapetus, Kore, Laomedeia, Leda, Orus, Pulcherrima, Puck, Rasalgethi, Sadachbia,
+Sadaltager, Schedar, Sulafat, Umbriel, Vindemiatrix, Zephyr, Zubenelgenubi.
+Full Chirp names such as `en-US-Chirp3-HD-Zephyr` also work.
 
-```bash
-generate-voice --input-file script.txt --output-file output.wav --audio-format WAV
-```
-
-**5. Pipe text from another command:**
-
-```bash
-echo "Piped input is supported." | generate-voice --temp
-```
-
-## Command Line Options
+## Options
 
 | Option | Description |
 | :--- | :--- |
-| `text` | The text to synthesize (positional argument). |
-| `--input-file` | Path to a text file to read input from. |
-| `--output-file` | Path to save the generated audio file. |
-| `--audio-format` | Output format: `MP3` (default), `WAV`, `OGG`. |
-| `--temp` | Generate to a temporary file, play it, then delete it. |
-| `--no-play` | Generate the file but do not auto-play it. |
-| `--voice-name` | Specific voice to use (default: `en-US-Chirp3-HD-Zephyr`). |
-| `--list-voices` | Display a table of available Chirp voices. |
-| `--sample-voices` | Iterate through and play a short sample of each available voice. |
-| `--language-code` | Language code (default: `en-US`). |
-| `--project-id` | Google Cloud Project ID (overrides env var). |
+| `text` | Text to speak (positional). |
+| `--input-file FILE` | Read text from a file. |
+| `--output-file FILE` | Save audio here (default: name from text + timestamp). |
+| `--audio-format` | `MP3` (default), `WAV`, `OGG`. |
+| `--temp` | Play from a temp file, then delete it. |
+| `--no-play` | Save without playing. |
+| `--model` | `gemini-2.5-flash-tts` (default), `gemini-2.5-pro-tts`, `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-lite-preview-tts`, `chirp3`. |
+| `--voice NAME` | Voice name (default `Zephyr`). `--voice-name` still works. |
+| `--prompt TEXT` | Style direction for Gemini models. Ignored for `chirp3`. |
+| `--language-code` | Default `en-US`. |
+| `--list-voices` | List voices for the chosen model. |
+| `--sample-voices` | Play a short sample of each voice. |
+| `--project-id` | Project to bill for Gemini-TTS. |
 
 ## Development
 
-This project uses `uv` for dependency management and `ruff` for linting.
-
-1.  **Sync dependencies:** `uv sync`
-2.  **Run tests:** `uv run pytest`
-3.  **Lint code:** `uv run ruff check src`
+```bash
+uv sync
+uv run pytest
+uv run ruff check src
+```
