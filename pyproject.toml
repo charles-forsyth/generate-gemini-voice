@@ -1,6 +1,6 @@
 [project]
 name = "generate-gemini-voice"
-version = "0.3.0"
+version = "0.3.1"
 description = "CLI for Google Cloud Text-to-Speech: Gemini-TTS and Chirp 3 HD voices."
 readme = "README.md"
 requires-python = ">=3.9"

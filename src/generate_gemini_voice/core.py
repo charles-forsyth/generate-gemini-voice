@@ -111,6 +111,26 @@ def _gemini_api_key() -> str:
     return key
 
 
+def _wav_pcm(data: bytes) -> bytes:
+    """PCM samples of a RIFF/WAVE blob: the `data` chunk only.
+
+    Gemini 3.8 TTS returns WAV with extra chunks after the audio (a C2PA
+    provenance manifest, "Created by Google Generative AI"). Slicing off a
+    fixed 44-byte header kept those bytes and played them as a burst of static
+    at the end of every clip.
+    """
+    pos = 12  # after "RIFF" <size> "WAVE"
+    while pos + 8 <= len(data):
+        cid = data[pos : pos + 4]
+        size = int.from_bytes(data[pos + 4 : pos + 8], "little")
+        body = pos + 8
+        if cid == b"data":
+            end = min(body + size, len(data))
+            return data[body : end - ((end - body) % 2)]  # whole 16-bit samples
+        pos = body + size + (size & 1)  # chunks are word-aligned
+    return data[44:]  # malformed: fall back to the old behaviour
+
+
 def _gemini_api_chunk(client, text: str, model: str, voice: str, prompt) -> bytes:
     """One Gemini API TTS call. Returns raw 16-bit PCM (24 kHz mono)."""
     from google.genai import errors as genai_errors
@@ -134,7 +154,7 @@ def _gemini_api_chunk(client, text: str, model: str, voice: str, prompt) -> byte
             )
             data = resp.candidates[0].content.parts[0].inline_data.data
             if data[:4] == b"RIFF":  # some responses arrive as WAV
-                data = data[44:]
+                data = _wav_pcm(data)
             return data
         except genai_errors.APIError as e:
             code = getattr(e, "code", 0) or 0
