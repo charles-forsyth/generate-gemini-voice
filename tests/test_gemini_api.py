@@ -45,6 +45,38 @@ def test_gemini_api_writes_wav_and_passes_prompt(monkeypatch, tmp_path):
 
 
 def test_gemini_api_strips_wav_header(monkeypatch):
-    client = _fake_client(b"RIFF" + b"\x00" * 40 + b"PCM!")
+    blob = (
+        b"RIFF"
+        + (40).to_bytes(4, "little")
+        + b"WAVEfmt "
+        + (16).to_bytes(4, "little")
+        + b"\x00" * 16
+        + b"data"
+        + (4).to_bytes(4, "little")
+        + b"PCM!"
+    )
+    client = _fake_client(blob)
     data = core._gemini_api_chunk(client, "x", "gemini-3.8-flash-tts", "Zephyr", None)
     assert data == b"PCM!"
+
+
+def test_wav_trailing_chunks_are_not_audio():
+    """Gemini appends a C2PA manifest after the data chunk; it must not be played."""
+    pcm = b"\x10\x00" * 50
+    blob = (
+        b"RIFF"
+        + (0).to_bytes(4, "little")
+        + b"WAVEfmt "
+        + (16).to_bytes(4, "little")
+        + b"\x00" * 16
+        + b"LIST"
+        + (3).to_bytes(4, "little")
+        + b"abc\x00"  # odd size + pad byte
+        + b"data"
+        + len(pcm).to_bytes(4, "little")
+        + pcm
+        + b"C2PA"
+        + (25).to_bytes(4, "little")
+        + b"Created by Google Gen AI"
+    )
+    assert core._wav_pcm(blob) == pcm
