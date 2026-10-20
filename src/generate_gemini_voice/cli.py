@@ -66,7 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Save to this file (default: name from text + timestamp).",
     )
     o.add_argument(
-        "--audio-format", default="MP3", choices=["MP3", "WAV", "OGG"], type=str.upper
+        "--audio-format",
+        default=None,
+        choices=["MP3", "WAV", "OGG"],
+        type=str.upper,
+        help="MP3 (default), WAV, or OGG. Inferred from --output-file extension when omitted.",
     )
     o.add_argument(
         "--temp",
@@ -138,10 +142,21 @@ def _temp_path(audio_format: str) -> str:
     return path
 
 
+def _resolve_audio_format(audio_format, output_file) -> str:
+    if audio_format:
+        return audio_format
+    if output_file:
+        ext = os.path.splitext(output_file)[1].lstrip(".").upper()
+        if ext in ("MP3", "WAV", "OGG"):
+            return ext
+    return "MP3"
+
+
 def main() -> None:
     ensure_config_exists()
     parser = build_parser()
     args = parser.parse_args()
+    args.audio_format = _resolve_audio_format(args.audio_format, args.output_file)
 
     if args.prompt and args.model == CHIRP_MODEL:
         print("Note: --prompt is ignored for chirp3.", file=sys.stderr)
