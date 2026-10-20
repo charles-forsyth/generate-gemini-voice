@@ -61,7 +61,7 @@ def test_split_text_strict_bytes():
 
 
 @patch("generate_gemini_voice.core._synthesize_single_chunk")
-def test_generate_speech_streaming_mp3(mock_synthesize, tmp_path):
+def test_generate_speech_streaming_mp3(mock_synthesize, mock_tts_client, tmp_path):
     """Test streaming MP3 concatenation."""
     # Mock return 3 chunks
     mock_synthesize.side_effect = [b"chunk1", b"chunk2", b"chunk3"]
@@ -83,7 +83,7 @@ def test_generate_speech_streaming_mp3(mock_synthesize, tmp_path):
 
 
 @patch("generate_gemini_voice.core._synthesize_single_chunk")
-def test_generate_speech_streaming_wav(mock_synthesize, tmp_path):
+def test_generate_speech_streaming_wav(mock_synthesize, mock_tts_client, tmp_path):
     """Test streaming WAV stitching and header patching."""
     # Construct Mock WAV chunks
     # Chunk 1: Header + 10 bytes "A"

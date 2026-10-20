@@ -87,3 +87,23 @@ def test_cli_invalid_model(capsys):
         with pytest.raises(SystemExit):
             main()
     assert "invalid choice" in capsys.readouterr().err
+
+
+def test_cli_infers_audio_format_from_output_file_extension(
+    mock_tts_client, mock_pygame, tmp_path
+):
+    output = tmp_path / "cli_test.wav"
+    with patch("generate_gemini_voice.cli.generate_speech") as mock_gen:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "generate-voice",
+                "Hello World",
+                "--output-file",
+                str(output),
+                "--no-play",
+            ],
+        ):
+            main()
+        assert mock_gen.call_args.kwargs["audio_format"] == "WAV"
